@@ -24,9 +24,9 @@
             autocomplete="email"
             placeholder="email@example.com" />
 
-        <flux:select wire:model="country" :label="__('Country')"  placeholder="Choose country..." required>
-            @foreach($countries as $country)
-                <flux:select.option value="{{ $country['name'] }}">{{ $country['name'] }}</flux:select.option>
+        <flux:select wire:model="country" :label="__('Country')" placeholder="Choose country..." required>
+            @foreach($countries as $countryData)
+                <flux:select.option value="{{ $countryData['name'] }}">{{ $countryData['name'] }}</flux:select.option>
             @endforeach
         </flux:select>
 

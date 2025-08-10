@@ -20,10 +20,8 @@ use Illuminate\Support\Facades\Hash;
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
-
     protected static ?string $navigationGroup = 'User Management';
+    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
     public static function form(Form $form): Form
     {
@@ -47,16 +45,11 @@ class UserResource extends Resource
                     ->searchable(),
                 Forms\Components\DateTimePicker::make('email_verified_at'),
                 Forms\Components\TextInput::make('password')
-                    ->password()
+                    ->password(fn(Page $livewire) => ($livewire instanceof CreateRecord))
                     ->required(fn(Page $livewire) => ($livewire instanceof CreateRecord))
                     ->dehydrateStateUsing(fn($state) => Hash::make($state))
                     ->dehydrated(fn($state) => filled($state))
                     ->maxLength(255),
-                Forms\Components\Select::make('role')
-                    ->multiple()
-                    ->relationship('roles', 'name')
-                    ->searchable()
-                    ->preload()
             ]);
     }
 
@@ -71,18 +64,9 @@ class UserResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('country')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('roles.name')
-                    ->searchable()
-                    ->badge()
-                    ->color(fn(string $state): string => match ($state) {
-                        'user' => 'primary',
-                        'admin' => 'success',
-                        'super_admin' => 'danger',
-                    })
+                Tables\Columns\TextColumn::make('email_verified_at')
+                    ->dateTime()
                     ->sortable(),
-                // Tables\Columns\TextColumn::make('email_verified_at')
-                //     ->dateTime()
-                //     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -101,8 +85,7 @@ class UserResource extends Resource
                     Tables\Actions\ViewAction::make(),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make(),
-                    Tables\Actions\RestoreAction::make(),
-                    Tables\Actions\ForceDeleteAction::make(),
+                    Tables\Actions\RestoreAction::make()
                 ])
             ])
             ->bulkActions([
