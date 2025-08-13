@@ -145,7 +145,6 @@ class ParticipantResource extends Resource
                     ->getStateUsing(fn($record) => $record->first_name . ' ' . $record->last_name)
                     ->searchable(['first_name', 'last_name']),
                 Tables\Columns\TextColumn::make('nik')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('title_specialist')
                     ->searchable(),
@@ -160,7 +159,6 @@ class ParticipantResource extends Resource
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('phone_number')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('country')
                     ->searchable(),
@@ -169,11 +167,9 @@ class ParticipantResource extends Resource
                 Tables\Columns\TextColumn::make('city')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('postal_code')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Owner')
-                    ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('deleted_at')
                     ->dateTime()
