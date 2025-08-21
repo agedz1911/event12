@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('orders', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('reg_code')->unique();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('participant_id')->constrained('participants')->cascadeOnDelete();
             $table->decimal('total', 12, 0);
             $table->decimal('discount', 10, 0)->nullable();
             $table->string('coupon')->nullable();

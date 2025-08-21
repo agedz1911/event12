@@ -63,9 +63,10 @@ class ProductResource extends Resource
                 Forms\Components\TextInput::make('kuota')
                     ->required()
                     ->numeric(),
-                Forms\Components\Toggle::make('is_active')
+                Forms\Components\Toggle::make('is_early_bird')
                     ->default(true)
                     ->required(),
+                Forms\Components\Toggle::make('is_onsite')
             ]);
     }
 
@@ -111,7 +112,9 @@ class ProductResource extends Resource
                 Tables\Columns\TextColumn::make('kuota')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\IconColumn::make('is_active')
+                Tables\Columns\IconColumn::make('is_early_bird')
+                    ->boolean(),
+                Tables\Columns\IconColumn::make('is_onsite')
                     ->boolean(),
                 Tables\Columns\TextColumn::make('deleted_at')
                     ->dateTime()

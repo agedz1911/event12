@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('transactions', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('order_id')->constrained('registration_orders')->cascadeOnDelete();
+            $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
             $table->string('payment_method')->nullable();
             $table->string('payment_status')->nullable();
             $table->date('payment_date')->nullable();

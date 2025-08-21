@@ -26,7 +26,8 @@ return new class extends Migration
             $table->date('date_start_onsite_price');
             $table->date('date_end_onsite_price');
             $table->integer('kuota');
-            $table->boolean('is_active')->default(true);
+            $table->boolean('is_early_bird')->default(true);
+            $table->boolean('is_onsite');
             $table->softDeletes();
             $table->timestamps();
         });

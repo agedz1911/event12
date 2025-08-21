@@ -27,7 +27,8 @@ class Product extends Model
         'date_start_onsite_price',
         'date_end_onsite_price',
         'kuota',
-        'is_active'
+        'is_early_bird',
+        'is_onsite'
     ];
 
     public function region(): BelongsTo
