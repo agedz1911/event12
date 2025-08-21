@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\ParticipantResource\RelationManagers\ParticipantsRelationManager;
 use App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource\RelationManagers;
 use App\Models\User;
@@ -52,7 +53,12 @@ class UserResource extends Resource
                     ->maxLength(255),
                 Forms\Components\Select::make('role')
                     ->multiple()
-                    ->relationship('roles', 'name')
+                    ->relationship('roles', 'name', function ($query) {
+                        if (!auth()->user()->hasRole('super_admin')) {
+                            $query->where('name', '!=', 'super_admin');
+                        }
+                        return $query;
+                    })
                     ->preload()
             ]);
     }
@@ -90,7 +96,8 @@ class UserResource extends Resource
                     Tables\Actions\ViewAction::make(),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make(),
-                    Tables\Actions\RestoreAction::make()
+                    Tables\Actions\RestoreAction::make(),
+                    Tables\Actions\ForceDeleteAction::make(),
                 ])
             ])
             ->bulkActions([
@@ -105,7 +112,7 @@ class UserResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ParticipantsRelationManager::class
         ];
     }
 
