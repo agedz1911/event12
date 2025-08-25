@@ -17,6 +17,7 @@ class Order extends Model
     protected $fillable = [
         'reg_code',
         'participant_id',
+        'subtotal', 
         'total',
         'discount',
         'coupon',

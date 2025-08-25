@@ -30,83 +30,75 @@ class EditOrder extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        // Load transaction data
-        if ($this->record->transaction) {
-            $data['payment_method'] = $this->record->transaction->payment_method;
-            $data['payment_date'] = $this->record->transaction->payment_date;
-            $data['payment_status'] = $this->record->transaction->payment_status;
-            $data['payment_amount'] = $this->record->transaction->amount;
-            $data['attachment'] = $this->record->transaction->attachment;
+        // Load relasi transaction untuk form
+        $record = $this->getRecord();
+        
+        if ($record->transaction) {
+            $data['transaction'] = $record->transaction->toArray();
         }
-
-        // Calculate subtotal from items
-        $subtotal = $this->record->items->sum('unit_price');
+        
+        // Hitung subtotal dari items
+        $subtotal = 0;
+        foreach ($record->items as $item) {
+            $subtotal += $item->unit_price;
+        }
         $data['subtotal'] = $subtotal;
-        $data['payment_amount'] = $data['total'];
-
+        $data['payment_amount'] = $record->total;
+        
         return $data;
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // Pastikan total dihitung dengan benar
+        // Hitung subtotal dari items
         $subtotal = 0;
         if (isset($data['items']) && is_array($data['items'])) {
             foreach ($data['items'] as $item) {
                 if (isset($item['unit_price'])) {
-                    $subtotal += $item['unit_price'];
+                    $subtotal += (float) $item['unit_price'];
                 }
             }
         }
-
-        $discount = $data['discount'] ?? 0;
-        $data['total'] = $subtotal - $discount;
-
+        
+        $data['subtotal'] = $subtotal;
+        
+        // Hitung total dengan discount
+        $discount = (float) ($data['discount'] ?? 0);
+        $total = max(0, $subtotal - $discount); // Pastikan total tidak negatif
+        $data['total'] = $total;
+        
+        // Sync transaction amount
+        if (isset($data['transaction'])) {
+            $data['transaction']['amount'] = $total;
+        }
+        
         return $data;
     }
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        // Update the main order
-        $record->update([
-            'reg_code' => $data['reg_code'],
-            'participant_id' => $data['participant_id'],
-            'total' => $data['total'],
-            'discount' => $data['discount'] ?? 0,
-            'coupon' => $data['coupon'] ?? null,
-            'status' => $data['status'],
-        ]);
-
-        // Update order items
-        $record->items()->delete(); // Delete existing items
-
-        if (isset($data['items']) && is_array($data['items'])) {
-            foreach ($data['items'] as $itemData) {
-                if (isset($itemData['product_id']) && isset($itemData['quantity']) && isset($itemData['unit_price'])) {
-                    OrderItem::create([
-                        'order_id' => $record->id,
-                        'product_id' => $itemData['product_id'],
-                        'quantity' => $itemData['quantity'],
-                        'unit_price' => $itemData['unit_price'],
-                    ]);
-                }
+        // Pisahkan data transaction
+        $transactionData = $data['transaction'] ?? [];
+        unset($data['transaction']);
+        
+        // Update order
+        $record->update($data);
+        
+        // Update atau buat transaction
+        if (!empty($transactionData)) {
+            if ($record->transaction) {
+                $record->transaction->update($transactionData);
+            } else {
+                $transactionData['order_id'] = $record->id;
+                $record->transaction()->create($transactionData);
             }
         }
-
-        // Update or create transaction
-        if (isset($data['payment_method']) || isset($data['payment_status'])) {
-            $record->transaction()->updateOrCreate(
-                ['order_id' => $record->id],
-                [
-                    'payment_method' => $data['payment_method'] ?? null,
-                    'payment_date' => $data['payment_date'] ?? null,
-                    'payment_status' => $data['payment_status'] ?? null,
-                    'amount' => $data['total'],
-                    'attachment' => $data['attachment'] ?? null,
-                ]
-            );
-        }
-
+        
         return $record;
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return $this->getResource()::getUrl('index');
     }
 }

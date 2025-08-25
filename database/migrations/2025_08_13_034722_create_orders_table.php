@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('reg_code')->unique();
             $table->foreignId('participant_id')->constrained('participants')->cascadeOnDelete();
             $table->decimal('total', 12, 0);
+            $table->decimal('subtotal', 12, 0);
             $table->decimal('discount', 10, 0)->nullable();
             $table->string('coupon')->nullable();
             $table->string('status');

@@ -30,64 +30,73 @@ class CreateOrder extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Pastikan total dihitung dengan benar
+        // Debug: lihat data yang masuk
+        // dd($data); // uncomment untuk debug
+
+        // Pastikan subtotal dihitung dari items (unit_price sudah berisi total per item)
         $subtotal = 0;
         if (isset($data['items']) && is_array($data['items'])) {
             foreach ($data['items'] as $item) {
-                if (isset($item['unit_price'])) {
-                    $subtotal += $item['unit_price'];
+                if (isset($item['unit_price']) && is_numeric($item['unit_price'])) {
+                    $subtotal += (float) $item['unit_price'];
                 }
             }
         }
 
-        $discount = $data['discount'] ?? 0;
-        $data['total'] = $subtotal - $discount;
+        // Set subtotal
+        $data['subtotal'] = $subtotal;
+
+        // Hitung total dengan discount
+        $discount = (float) ($data['discount'] ?? 0);
+        $total = max(0, $subtotal - $discount); // Pastikan total tidak negatif
+        $data['total'] = $total;
+
+        // Pastikan transaction amount sama dengan total
+        if (isset($data['transaction'])) {
+            $data['transaction']['amount'] = $total;
+        }
 
         return $data;
     }
 
+
     protected function handleRecordCreation(array $data): Model
     {
-        // Create the main order
-        $orderData = [
-            'reg_code' => $data['reg_code'],
-            'participant_id' => $data['participant_id'],
-            'total' => $data['total'],
-            'discount' => $data['discount'] ?? 0,
-            'coupon' => $data['coupon'] ?? null,
-            'status' => $data['status'],
-        ];
+        // Pisahkan data transaction dan items dari data order
+        $transactionData = $data['transaction'] ?? [];
+        $itemsData = $data['items'] ?? [];
 
-        $order = Order::create($orderData);
+        // Hapus dari data order
+        unset($data['transaction'], $data['items']);
 
-        // Create order items
-        if (isset($data['items']) && is_array($data['items'])) {
-            foreach ($data['items'] as $itemData) {
-                if (isset($itemData['product_id']) && isset($itemData['quantity']) && isset($itemData['unit_price'])) {
-                    OrderItem::create([
-                        'order_id' => $order->id,
-                        'product_id' => $itemData['product_id'],
-                        'quantity' => $itemData['quantity'],
-                        'unit_price' => $itemData['unit_price'],
-                    ]);
-                }
+        // Buat order terlebih dahulu
+        $order = static::getModel()::create($data);
+
+        // Buat items jika ada
+        if (!empty($itemsData) && is_array($itemsData)) {
+            foreach ($itemsData as $itemData) {
+                $order->items()->create([
+                    'product_id' => $itemData['product_id'],
+                    'quantity' => $itemData['quantity'],
+                    'unit_price' => $itemData['unit_price'],
+                ]);
             }
         }
 
-        // Create transaction if payment data exists
-        if (isset($data['payment_method']) || isset($data['payment_status'])) {
-            Transaction::create([
-                'order_id' => $order->id,
-                'payment_method' => $data['payment_method'] ?? null,
-                'payment_date' => $data['payment_date'] ?? null,
-                'payment_status' => $data['payment_status'] ?? null,
-                'amount' => $data['total'],
-                'attachment' => $data['attachment'] ?? null,
+        // Buat transaction jika ada data transaction
+        if (!empty($transactionData)) {
+            $order->transaction()->create([
+                'payment_method' => $transactionData['payment_method'] ?? null,
+                'payment_status' => $transactionData['payment_status'] ?? null,
+                'payment_date' => $transactionData['payment_date'] ?? null,
+                'amount' => $transactionData['amount'] ?? $order->total,
+                'attachment' => $transactionData['attachment'] ?? null,
             ]);
         }
 
         return $order;
     }
+
 
     protected function getRedirectUrl(): string
     {

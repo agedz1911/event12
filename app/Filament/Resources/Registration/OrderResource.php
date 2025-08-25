@@ -61,7 +61,6 @@ class OrderResource extends Resource
                                         }))
                                         ->searchable()
                                         ->required(),
-
                                     ToggleButtons::make('status')
                                         ->required()
                                         ->options(RegStatus::class)
@@ -80,7 +79,7 @@ class OrderResource extends Resource
                                                 ->options(Product::all()->mapWithKeys(function ($product) {
                                                     return [$product->id => $product->name .  ' | ' .  $product->early_bird .  ' | ' .  $product->normal_price . ' | ' . $product->onsite_price];
                                                 }))
-                                                ->reactive()
+                                                ->live()
                                                 ->searchable()
                                                 ->required()
                                                 ->afterStateUpdated(function ($state, callable $set, callable $get, $livewire) {
@@ -89,11 +88,11 @@ class OrderResource extends Resource
                                                         $quantity = $get('quantity') ?: 1;
 
                                                         if ($product) {
-                                                            $price = self::getProductPrice($product);
+                                                            $price = static::getProductPrice($product);
                                                             $set('unit_price', $price * $quantity);
 
-                                                            // Trigger total calculation
-                                                            $livewire->dispatch('items-updated');
+                                                            // Trigger recalculation
+                                                            static::recalculateFromItems($livewire);
                                                         }
                                                     }
                                                 }),
@@ -101,18 +100,18 @@ class OrderResource extends Resource
                                                 ->label('Quantity')
                                                 ->numeric()
                                                 ->default(1)
-                                                ->reactive()
+                                                ->live()
                                                 ->required()
                                                 ->afterStateUpdated(function ($state, callable $set, callable $get, $livewire) {
                                                     $productId = $get('product_id');
                                                     if ($productId && $state) {
                                                         $product = Product::find($productId);
                                                         if ($product) {
-                                                            $price = self::getProductPrice($product);
+                                                            $price = static::getProductPrice($product);
                                                             $set('unit_price', $price * $state);
 
-                                                            // Trigger total calculation
-                                                            $livewire->dispatch('items-updated');
+                                                            // Trigger recalculation
+                                                            static::recalculateFromItems($livewire);
                                                         }
                                                     }
                                                 }),
@@ -121,45 +120,54 @@ class OrderResource extends Resource
                                                 ->numeric()
                                                 ->disabled()
                                                 ->dehydrated()
-                                                ->reactive(),
+                                                ->live(),
                                         ])->columns(3),
                                 ])
                                 ->addActionLabel('Add Product')
                                 ->reorderable(false)
-                                ->live() // Tambahkan ini untuk real-time updates
+                                ->live()
                                 ->afterStateUpdated(function ($state, callable $set, $livewire) {
-                                    self::calculateSubtotal($state, $set, $livewire);
+                                    static::recalculateFromItems($livewire);
                                 })
                                 ->deleteAction(
-                                    fn(Action $action) => $action->after(fn($livewire) => $livewire->dispatch('items-updated'))
+                                    fn(Action $action) => $action->after(function ($livewire) {
+                                        static::recalculateFromItems($livewire);
+                                    })
                                 ),
                         ]),
                     Step::make('Order Detail')
                         ->schema([
                             Section::make()
                                 ->schema([
-                                    Hidden::make('subtotal')
-                                        ->default(0),
+                                    TextInput::make('subtotal')
+                                        ->label('Subtotal')
+                                        ->numeric()
+                                        ->disabled()
+                                        ->dehydrated()
+                                        ->default(0)
+                                        ->prefix('Rp'),
                                     TextInput::make('coupon')
                                         ->label('Coupon Code')
-                                        ->reactive()
+                                        ->live()
                                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                                            self::applyCoupon($state, $set, $get);
+                                            static::applyCoupon($state, $set, $get);
                                         }),
                                     TextInput::make('discount')
                                         ->label('Discount Amount')
                                         ->numeric()
                                         ->default(0)
-                                        ->reactive()
+                                        ->live()
+                                        ->prefix('Rp')
                                         ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                                            self::calculateGrandTotal($set, $get);
+                                            static::calculateGrandTotal($set, $get);
                                         }),
                                     TextInput::make('total')
                                         ->label('Total Amount')
                                         ->numeric()
                                         ->disabled()
                                         ->dehydrated()
-                                        ->default(0),
+                                        ->default(0)
+                                        ->prefix('Rp'),
                                 ])
                         ]),
                     Step::make('Payment')
@@ -170,21 +178,25 @@ class OrderResource extends Resource
                                         ->label('Payment Amount')
                                         ->numeric()
                                         ->disabled()
-                                        ->dehydrated(false), // Jangan simpan field ini
-                                    ToggleButtons::make('payment_method')
+                                        ->dehydrated(false)
+                                        ->prefix('Rp'),
+                                    ToggleButtons::make('transaction.payment_method')
                                         ->label('Payment Method')
                                         ->options(PaymentMethod::class)
                                         ->inline()
                                         ->required(),
-                                    ToggleButtons::make('payment_status')
+                                    ToggleButtons::make('transaction.payment_status')
                                         ->label('Payment Status')
                                         ->options(PaymentStatus::class)
                                         ->inline()
                                         ->required(),
-                                    DatePicker::make('payment_date')
+                                    DatePicker::make('transaction.payment_date')
                                         ->label('Payment Date'),
+                                    Hidden::make('transaction.amount')
+                                        ->dehydrated()
+                                        ->default(0),
                                 ])->columns(2),
-                            FileUpload::make('attachment')
+                            FileUpload::make('transaction.attachment')
                                 ->maxSize(3072)
                                 ->downloadable()
                                 ->reorderable()
@@ -195,62 +207,84 @@ class OrderResource extends Resource
                         ]),
                 ])->columnSpanFull()
                     ->submitAction(new HtmlString('<button type="submit">Submit</button>'))
-            ])->live();;
+            ])
+            ->live();
     }
 
     protected static function getProductPrice(Product $product): float
     {
         if ($product->is_early_bird) {
-            return $product->early_bird;
+            return (float) $product->early_bird;
         } elseif ($product->is_onsite) {
-            return $product->onsite_price;
+            return (float) $product->onsite_price;
         } else {
-            return $product->normal_price;
+            return (float) $product->normal_price;
         }
     }
 
-    protected static function calculateSubtotal($items, callable $set, $livewire): void
+    protected static function recalculateFromItems($livewire): void
     {
+        $items = $livewire->data['items'] ?? [];
         $subtotal = 0;
+
         if (is_array($items)) {
             foreach ($items as $item) {
                 if (isset($item['unit_price']) && is_numeric($item['unit_price'])) {
-                    $subtotal += $item['unit_price'];
+                    // unit_price already contains the total for this line item (price * quantity)
+                    $subtotal += (float) $item['unit_price'];
                 }
             }
         }
 
-        $set('subtotal', $subtotal);
+        // Update subtotal
+        $livewire->data['subtotal'] = $subtotal;
 
-        // Update total berdasarkan subtotal dan discount
-        $discount = $livewire->data['discount'] ?? 0;
-        $total = $subtotal - $discount;
-        $set('total', $total);
-        $set('payment_amount', $total);
+        // Calculate total with existing discount
+        $discount = (float) ($livewire->data['discount'] ?? 0);
+        $total = max(0, $subtotal - $discount); // Pastikan total tidak negatif
+
+        // Update total and payment amount
+        $livewire->data['total'] = $total;
+        $livewire->data['payment_amount'] = $total;
+
+        // Sync transaction amount
+        if (!isset($livewire->data['transaction'])) {
+            $livewire->data['transaction'] = [];
+        }
+        $livewire->data['transaction']['amount'] = $total;
     }
+
 
     protected static function applyCoupon($couponCode, callable $set, callable $get): void
     {
-        $subtotal = $get('subtotal') ?: 0;
+        $subtotal = (float) ($get('subtotal') ?: 0);
         $discount = 0;
 
-        if ($couponCode === 'discount10' && $subtotal > 0) {
-            $discount = $subtotal * 0.10; // 10% discount
+        if (!empty($couponCode) && $subtotal > 0) {
+            if ($couponCode === 'discount10') {
+                $discount = $subtotal * 0.10; // 10% discount
+            } elseif ($couponCode === 'discount20') {
+                $discount = $subtotal * 0.20; // 20% discount
+            }
         }
 
         $set('discount', $discount);
-        self::calculateGrandTotal($set, $get);
+        static::calculateGrandTotal($set, $get);
     }
+
 
     protected static function calculateGrandTotal(callable $set, callable $get): void
     {
-        $total = $get('total') ?: 0;
-        $discount = $get('discount') ?: 0;
-        $grandTotal = $total - $discount;
+        $subtotal = (float) ($get('subtotal') ?: 0);
+        $discount = (float) ($get('discount') ?: 0);
+        $grandTotal = max(0, $subtotal - $discount); // Pastikan total tidak negatif
 
         $set('total', $grandTotal);
+        $set('payment_amount', $grandTotal);
         $set('transaction.amount', $grandTotal);
     }
+
+
 
     public static function table(Table $table): Table
     {
@@ -262,10 +296,26 @@ class OrderResource extends Resource
                     ->searchable()
                     ->sortable(),
                 // ->getStateUsing(fn($record) => $record->first_name . ' ' . $record->last_name),
-                TextColumn::make('product_id'),
+                TextColumn::make('items.product.name')
+                    ->label('Products')
+                    ->wrap()
+                    ->limit(50)
+                    ->tooltip(fn($record) => $record->items->pluck('product.name')->join(', ')),
+                TextColumn::make('items.quantity')
+                    ->label('Quantity'),
+                TextColumn::make('items.unit_price')
+                    ->label('Unit Price'),
                 TextColumn::make('total')->label('Total')->money('idr', true)->sortable(),
                 TextColumn::make('discount')->label('Discount')->money('idr', true)->sortable(),
                 TextColumn::make('coupon')->label('Coupon')->sortable(),
+                TextColumn::make('transaction.payment_method')
+                    ->label('Payment Method'),
+                TextColumn::make('transaction.payment_date')
+                    ->label('Payment Date'),
+                TextColumn::make('transaction.payment_status')
+                    ->label('Payment Status'),
+                TextColumn::make('transaction.amount')
+                    ->label('Payment Amount'),
             ])
             ->filters([
                 Tables\Filters\TrashedFilter::make(),
